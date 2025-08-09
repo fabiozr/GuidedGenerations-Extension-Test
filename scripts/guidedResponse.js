@@ -1,7 +1,7 @@
 /**
  * @file Contains the logic for the Guided Response button.
  */
-import { isGroupChat, setPreviousImpersonateInput, getPreviousImpersonateInput } from '../index.js'; // Import group chat checker and shared state functions
+import { isGroupChat, setPreviousImpersonateInput, getPreviousImpersonateInput, runWithConnectionProfile } from '../index.js'; // Import group chat checker and shared state functions and profile helper
 import { getContext, extension_settings } from '../../../../extensions.js'; // Correct path to extensions.js
 
 // Import the guide scripts for direct execution
@@ -32,6 +32,21 @@ const guidedResponse = async () => {
     const promptTemplate = extension_settings[extensionName]?.promptGuidedResponse ?? '';
     const filledPrompt = promptTemplate.replace('{{input}}', originalInput);
     const depth = extension_settings[extensionName]?.depthPromptGuidedResponse ?? 0;
+
+    // Option B: Use Connection Profile directly if enabled
+    const useProfile = !!extension_settings[extensionName]?.useConnectionProfile;
+    if (useProfile && extension_settings[extensionName]?.profileId) {
+        try {
+            await runWithConnectionProfile(filledPrompt);
+        } catch (e) {
+            console.error('[GuidedGenerations][Response] Connection profile run failed:', e);
+        } finally {
+            // Restore original input; leave result in input if desired? For now, restore to original
+            textarea.value = originalInput;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        return;
+    }
 
     // Check if it's a group chat using the helper function
     if (isGroupChat()) {

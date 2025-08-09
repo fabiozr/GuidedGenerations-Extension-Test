@@ -1,7 +1,7 @@
 // scripts/guidedImpersonate.js
 import { getPreviousImpersonateInput, setPreviousImpersonateInput, getLastImpersonateResult, setLastImpersonateResult } from '../index.js'; // Import shared state functions
 import { getContext, extension_settings } from '../../../../extensions.js';
-import { extensionName } from '../index.js';
+import { extensionName, runWithConnectionProfile } from '../index.js';
 import { handlePresetSwitching } from './utils/presetUtils.js';
 
 const guidedImpersonate = async () => {
@@ -34,29 +34,26 @@ const guidedImpersonate = async () => {
     const promptTemplate = extension_settings[extensionName]?.promptImpersonate1st ?? '';
     const filledPrompt = promptTemplate.replace('{{input}}', currentInputText);
 
-    // Build STScript without preset switching
+    // Build STScript (for legacy flow) and Connection Profile instruction (Option B)
     const stscriptCommand = `/impersonate await=true ${filledPrompt} |`;
     const fullScript = `// Impersonate guide|
 ${stscriptCommand}`;
 
     try {
         const context = getContext();
-        if (typeof context.executeSlashCommandsWithOptions === 'function') {
-            // Switch preset before executing
-            switchPreset();
-            
-            // Execute the command and wait for it to complete
-            await context.executeSlashCommandsWithOptions(fullScript); 
-            
-            // After completion, read the new input and store it using the setter
+        const useProfile = !!extension_settings[extensionName]?.useConnectionProfile;
+        if (useProfile && extension_settings[extensionName]?.profileId) {
+            // Option B: run via Connection Profile directly
+            await runWithConnectionProfile(filledPrompt);
             setLastImpersonateResult(textarea.value);
-            console.log('[GuidedGenerations] Guided Impersonate (1st) stscript executed, new input stored in shared state.');
-
-            // After completion, restore original preset using utility restore function
+        } else if (typeof context.executeSlashCommandsWithOptions === 'function') {
+            // Legacy: run via STScript
+            switchPreset();
+            await context.executeSlashCommandsWithOptions(fullScript);
+            setLastImpersonateResult(textarea.value);
             restore();
-
         } else {
-            console.error('[GuidedGenerations] context.executeSlashCommandsWithOptions not found!');
+            console.error('[GuidedGenerations] No execution path available for impersonate.');
         }
     } catch (error) {
         console.error(`[GuidedGenerations] Error executing Guided Impersonate (1st) stscript: ${error}`);

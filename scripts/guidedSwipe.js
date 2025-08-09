@@ -1,7 +1,7 @@
 // scripts/guidedSwipe.js
 
 import { getContext, extension_settings } from '../../../../extensions.js'; // Import getContext and extension_settings
-import { setPreviousImpersonateInput, getPreviousImpersonateInput } from '../index.js'; // Import shared state functions
+import { setPreviousImpersonateInput, getPreviousImpersonateInput, runWithConnectionProfile } from '../index.js'; // Import shared state functions and profile helper
 
 // Helper function for delays
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -193,6 +193,22 @@ const guidedSwipe = async () => {
         const promptTemplate = extension_settings[extensionName]?.promptGuidedSwipe ?? '';
         const filledPrompt = promptTemplate.replace('{{input}}', originalInput);
 
+        // Option B: If using connection profile, send one-shot instruction and then perform a plain swipe
+        const useProfile = !!extension_settings[extensionName]?.useConnectionProfile;
+        if (useProfile && extension_settings[extensionName]?.profileId) {
+            try {
+                await runWithConnectionProfile(filledPrompt);
+            } catch (e) {
+                console.error('[GuidedGenerations][Swipe] Connection profile run failed:', e);
+            }
+            // After injecting via profile result (now in input), trigger swipe normally
+            const swipeSuccess = await generateNewSwipe();
+            if (!swipeSuccess) {
+                console.error('[GuidedGenerations][Swipe] Swipe failed after profile run.');
+            }
+            return;
+        }
+
         // --- 1. Store Input & Inject Context (if any) --- (Use direct context method)
         if (originalInput.trim() || (promptTemplate.trim() !== '' && promptTemplate.trim() !== '{{input}}')) {
             // Use the currentInjectionRole retrieved above
@@ -279,7 +295,7 @@ const guidedSwipe = async () => {
         }
         // Clean up injection using the correct key
         console.log('[GuidedGenerations][Swipe] Cleaning up injection (finally block)');
-        await executeSTScriptCommand('/flushinject instruct'); // Already using 'instruct' ID here, which seems correct
+        try { await executeSTScriptCommand('/flushinject instruct'); } catch {}
     }
 };
 

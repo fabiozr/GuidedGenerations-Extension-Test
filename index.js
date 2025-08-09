@@ -44,6 +44,52 @@ export function setLastImpersonateResult(value) {
 }
 // --- End Shared State ---
 
+/**
+ * Option B helper: Run a short instruction against the selected Connection Profile.
+ * Builds a minimal chat history and appends the provided instruction as a system message.
+ * Updates #send_textarea with the result content.
+ */
+export async function runWithConnectionProfile(instructionText, maxTokensOptional) {
+    const context = getContext();
+    const settings = extension_settings[extensionName];
+    if (!settings?.profileId) {
+        console.warn(`${extensionName}: No connection profile selected.`);
+        return null;
+    }
+
+    // Build a minimal recent history (last ~20 messages) with roles
+    const recent = (context.chat || []).slice(-20).map(m => ({
+        role: m.is_user ? 'user' : 'assistant',
+        content: m.mes,
+    }));
+
+    // Append our instruction as a system message
+    const messages = [
+        ...recent,
+        { role: 'system', content: instructionText },
+    ];
+
+    try {
+        const maxTokens = typeof maxTokensOptional === 'number' ? maxTokensOptional : 512;
+        const resp = await context.ConnectionManagerRequestService.sendRequest(
+            settings.profileId,
+            messages,
+            maxTokens,
+        );
+        const content = resp?.content ?? '';
+        const textarea = document.getElementById('send_textarea');
+        if (textarea) {
+            textarea.value = content;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return content;
+    } catch (e) {
+        console.error(`${extensionName}: Connection profile request failed:`, e);
+        return null;
+    }
+}
+
 export const extensionName = "GuidedGenerations-Extension"; // Use the simple name as the internal identifier
 // const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`; // No longer needed
 
@@ -51,6 +97,9 @@ let isSending = false;
 // Removed storedInput as recovery now uses stscript global vars
 
 export const defaultSettings = {
+    // Connection Profile integration
+    profileId: '',
+    useConnectionProfile: false,
     autoTriggerClothes: false, // Default off
     autoTriggerState: false,   // Default off
     autoTriggerThinking: false, // Default off
@@ -194,10 +243,31 @@ function updateSettingsUI() {
             }
         });
 
-        // Update the new dropdown
+        // Update the new dropdowns and connection profile selector
         const injectionRoleSelect = document.getElementById('gg_injectionEndRole');
         if (injectionRoleSelect && extension_settings[extensionName].injectionEndRole) {
             injectionRoleSelect.value = extension_settings[extensionName].injectionEndRole;
+        }
+
+        // Initialize Connection Profile dropdown using ST's ConnectionManager like Roadway
+        try {
+            const context = getContext();
+            // Set the checkbox state
+            const useProfileCheckbox = document.getElementById('gg_useConnectionProfile');
+            if (useProfileCheckbox) {
+                useProfileCheckbox.checked = !!extension_settings[extensionName].useConnectionProfile;
+            }
+            // Initialize dropdown widget
+            context?.ConnectionManagerRequestService?.handleDropdown?.(
+                `#extension_settings_${extensionName} .connection_profile`,
+                extension_settings[extensionName].profileId,
+                (profile) => {
+                    extension_settings[extensionName].profileId = profile?.id ?? '';
+                    saveSettingsDebounced();
+                },
+            );
+        } catch (err) {
+            console.warn(`${extensionName}: Failed to initialize connection profile selector:`, err);
         }
 
         // Populate preset dropdowns
@@ -337,6 +407,7 @@ const handleSettingsChangeDelegated = (event) => {
             if (button) button.style.display = event.target.checked ? '' : 'none';
         }
     }
+    // Persist useConnectionProfile checkbox immediately (delegated listener covers it already)
 };
 
 // Separate handler function for clarity

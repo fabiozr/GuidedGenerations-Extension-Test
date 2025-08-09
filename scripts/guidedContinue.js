@@ -1,4 +1,4 @@
-import { setPreviousImpersonateInput, getPreviousImpersonateInput } from '../index.js';
+import { setPreviousImpersonateInput, getPreviousImpersonateInput, runWithConnectionProfile } from '../index.js';
 import { extension_settings, getContext } from '../../../../extensions.js'; // Import settings and getContext
 import { chat, eventSource, event_types, saveChatConditional, addOneMessage } from '../../../../../script.js'; // Corrected path: one more ../
 
@@ -81,6 +81,34 @@ const guidedContinue = async () => {
         commandParameter = promptTemplate.replace('{{input}}', originalInputFromTextarea);
     } else if (promptTemplate) {
         commandParameter = promptTemplate;
+    }
+
+    const useProfile = !!extension_settings[extensionName]?.useConnectionProfile;
+    // If using connection profile, send the continue instruction and then append to last message
+    if (useProfile && extension_settings[extensionName]?.profileId) {
+        try {
+            const result = await runWithConnectionProfile(commandParameter);
+            // Append result to last assistant message (continue)
+            const ctx = getContext();
+            const lastIdx = ctx.chat.length - 1;
+            if (lastIdx >= 0 && typeof ctx.chat[lastIdx]?.mes === 'string') {
+                isGuidedContinueInProgress = true;
+                ctx.chat[lastIdx].mes = (ctx.chat[lastIdx].mes || '') + (result || '');
+                ctx.chat[lastIdx].is_edited = true;
+                // emit edited to trigger UI and our completion handler
+                eventSource.emit(event_types.MESSAGE_EDITED, lastIdx, { isUndoRedo: true, newMes: ctx.chat[lastIdx].mes });
+            }
+        } catch (e) {
+            console.error(`[${extensionName}][Continue] Connection profile run failed:`, e);
+            isGuidedContinueInProgress = false;
+            indexOfMessageToModify = -1;
+            textOfMessageBeforeContinue = '';
+        } finally {
+            const restoredInput = getPreviousImpersonateInput();
+            textarea.value = restoredInput;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        return;
     }
 
     const stscriptCommand = `/continue await=true ${commandParameter} |`;

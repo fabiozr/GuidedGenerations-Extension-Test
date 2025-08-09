@@ -1,6 +1,6 @@
 // scripts/guidedImpersonate2nd.js
 import { getContext, extension_settings } from '../../../../extensions.js';
-import { extensionName, getPreviousImpersonateInput, setPreviousImpersonateInput, getLastImpersonateResult, setLastImpersonateResult } from '../index.js';
+import { extensionName, getPreviousImpersonateInput, setPreviousImpersonateInput, getLastImpersonateResult, setLastImpersonateResult, runWithConnectionProfile } from '../index.js';
 import { handlePresetSwitching } from './utils/presetUtils.js'; 
 
 const guidedImpersonate2nd = async () => {
@@ -47,24 +47,22 @@ const guidedImpersonate2nd = async () => {
 ${stscriptCommand}`;
 
     try {
-        const context = getContext(); 
-        if (typeof context.executeSlashCommandsWithOptions === 'function') {
-            // Switch preset before executing
+        const context = getContext();
+        const useProfile = !!extension_settings[extensionName]?.useConnectionProfile;
+        if (useProfile && extension_settings[extensionName]?.profileId) {
+            await runWithConnectionProfile(filledPrompt);
+            setLastImpersonateResult(textarea.value);
+        } else if (typeof context.executeSlashCommandsWithOptions === 'function') {
             switchPreset();
-            
             await context.executeSlashCommandsWithOptions(fullScript);
-            
-            // After completion, read the new input and store it in shared state
-            setLastImpersonateResult(textarea.value); // Use shared setter
-            console.log('[GuidedGenerations] Guided Impersonate (2nd) stscript executed, new input stored in shared state.');
+            setLastImpersonateResult(textarea.value);
         } else {
-            console.error('[GuidedGenerations] context.executeSlashCommandsWithOptions not found!');
+            console.error('[GuidedGenerations] No execution path available for 2nd-person impersonate.');
         }
     } catch (error) {
         console.error(`[GuidedGenerations] Error executing Guided Impersonate (2nd) stscript: ${error}`);
         setLastImpersonateResult(''); // Clear shared state on error
     } finally {
-        // After completion, restore original preset using utility restore function
         restore();
     }
 };
