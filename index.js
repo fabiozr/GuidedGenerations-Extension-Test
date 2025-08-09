@@ -90,7 +90,7 @@ export async function runWithConnectionProfile(instructionText, maxTokensOptiona
     }
 }
 
-export const extensionName = "GuidedGenerations-Extension"; // Use the simple name as the internal identifier
+export const extensionName = "GuidedGenerations-Extension-test"; // Use the simple name as the internal identifier
 // const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`; // No longer needed
 
 let isSending = false; 
