@@ -1,4 +1,4 @@
-import { getContext } from '../../../../../extensions.js';
+import { getContext, extension_settings } from '../../../../../extensions.js';
 import { extensionName } from '../../index.js';
 
 /**
@@ -7,7 +7,6 @@ import { extensionName } from '../../index.js';
  * @param {boolean} autoRestore - Whether to automatically restore the original preset when the returned restore function is called
  * @returns {Object} - Object containing originalPresetId, targetPresetId, and restore function
  */
-import { getContext, extension_settings } from '../../../../extensions.js';
 
 export function handlePresetSwitching(presetValue) {
     const extensionName = "GuidedGenerations-Extension";
