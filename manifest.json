@@ -1,6 +1,6 @@
 {
-    "name": "GuidedGenerations",
-    "display_name": "Guided Generations Extension",
+    "name": "GuidedGenerationsTest",
+    "display_name": "Guided Generations Extension-test",
     "loading_order": 100,
     "requires": [],
     "optional": [],

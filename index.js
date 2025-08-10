@@ -44,13 +44,15 @@ export function setLastImpersonateResult(value) {
 }
 // --- End Shared State ---
 
-export const extensionName = "GuidedGenerations-Extension"; // Use the simple name as the internal identifier
+export const extensionName = "GuidedGenerations-Extension-test"; // Use the simple name as the internal identifier
 // const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`; // No longer needed
 
 let isSending = false; 
 // Removed storedInput as recovery now uses stscript global vars
 
 export const defaultSettings = {
+    profileId: '',
+    useConnectionProfile: false,
     autoTriggerClothes: false, // Default off
     autoTriggerState: false,   // Default off
     autoTriggerThinking: false, // Default off
@@ -198,6 +200,27 @@ function updateSettingsUI() {
         const injectionRoleSelect = document.getElementById('gg_injectionEndRole');
         if (injectionRoleSelect && extension_settings[extensionName].injectionEndRole) {
             injectionRoleSelect.value = extension_settings[extensionName].injectionEndRole;
+        }
+        
+        // Initialize Connection Profile
+        try {
+            const context = getContext();
+            // Set the checkbox state
+            const useProfileCheckbox = document.getElementById('gg_useConnectionProfile');
+            if (useProfileCheckbox) {
+                useProfileCheckbox.checked = !!extension_settings[extensionName].useConnectionProfile;
+            }
+            // Initialize dropdown widget
+            context?.ConnectionManagerRequestService?.handleDropdown?.(
+                `#extension_settings_${extensionName} .connection_profile`,
+                extension_settings[extensionName].profileId,
+                (profile) => {
+                    extension_settings[extensionName].profileId = profile?.id ?? '';
+                    saveSettingsDebounced();
+                },
+            );
+        } catch (err) {
+            console.warn(`${extensionName}: Failed to initialize connection profile selector:`, err);
         }
 
         // Populate preset dropdowns

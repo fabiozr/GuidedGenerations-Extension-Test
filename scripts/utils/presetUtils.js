@@ -7,17 +7,39 @@ import { extensionName } from '../../index.js';
  * @param {boolean} autoRestore - Whether to automatically restore the original preset when the returned restore function is called
  * @returns {Object} - Object containing originalPresetId, targetPresetId, and restore function
  */
+import { getContext, extension_settings } from '../../../../extensions.js';
+
 export function handlePresetSwitching(presetValue) {
-    const extensionName = "GuidedGenerations-Extension";
+    const extensionName = "GuidedGenerations-Extension-test";
     let originalPresetId = null;
     let targetPresetId = null;
     let isTextCompletionMode = false;
     let presetIdToNameMap = {}; // Moved to function scope
 
-    console.log(`[${extensionName}] handlePresetSwitching called with presetValue:`, presetValue);
+    // Connection Profile switching (preferred when enabled)
+    const useConnectionProfile = !!extension_settings?.[extensionName]?.useConnectionProfile;
+    const profileId = extension_settings?.[extensionName]?.profileId;
+    let targetProfileName = null;
+    let originalProfileName = null;
+    if (useConnectionProfile && profileId) {
+        try {
+            const ctx = getContext();
+            const profiles = ctx?.extensionSettings?.connectionManager?.profiles || [];
+            // Detect current/active profile heuristically before switching
+            const active = profiles.find(p => p?.selected || p?.isActive || p?.active || p?.current);
+            originalProfileName = active?.name || active?.title || active?.id || null;
+            const match = profiles.find(p => p && (p.id === profileId));
+            // Try common fields for display name
+            targetProfileName = match?.name || match?.title || match?.id || null;
+        } catch (e) {
+            console.warn(`[${extensionName}] Failed to resolve connection profile by id`, e);
+        }
+    }
 
-    // Determine target preset ID without switching yet
-    if (presetValue) {
+    console.log(`[${extensionName}] handlePresetSwitching called with presetValue:`, presetValue, 'useConnectionProfile:', useConnectionProfile, 'targetProfileName:', targetProfileName);
+
+    // If connection profile is chosen, we will skip preset resolution entirely
+    if (!targetProfileName && presetValue) {
         console.log(`[${extensionName}] Getting preset manager...`);
         const presetManager = getContext()?.getPresetManager?.();
         console.log(`[${extensionName}] Preset manager:`, presetManager);
@@ -115,14 +137,25 @@ export function handlePresetSwitching(presetValue) {
         console.log(`[${extensionName}] No presetValue provided`);
     }
 
-    const switchPreset = () => {
+    const switchPreset = async () => {
         console.log(`[${extensionName}] switchPreset called with targetPresetId:`, targetPresetId);
-        
-        if (!targetPresetId) {
-            console.log(`[${extensionName}] No target preset ID, skipping switch`);
+        // Prefer connection profile switching if enabled and resolved
+        if (targetProfileName) {
+            try {
+                const ctx = getContext();
+                await ctx?.executeSlashCommandsWithOptions?.(`/profile ${String(targetProfileName).replace(/"/g, '\\"')}`);
+                console.log(`[${extensionName}] Switched connection profile to:`, targetProfileName);
+            } catch (err) {
+                console.error(`[${extensionName}] Error switching connection profile to '${targetProfileName}':`, err);
+            }
             return;
         }
-        
+
+        if (!targetPresetId) {
+            console.log(`[${extensionName}] No target preset ID, skipping preset switch`);
+            return;
+        }
+
         try {
             console.log(`[${extensionName}] Getting preset manager for switching...`);
             const presetManager = getContext()?.getPresetManager?.();
@@ -161,9 +194,22 @@ export function handlePresetSwitching(presetValue) {
         }
     };
 
-    const restore = () => {
+    const restore = async () => {
         console.log(`[${extensionName}] restore called with originalPresetId:`, originalPresetId, 'targetPresetId:', targetPresetId);
-        
+        // Restore previous connection profile if we switched and detected an original
+        if (targetProfileName) {
+            if (originalProfileName && originalProfileName !== targetProfileName) {
+                try {
+                    const ctx = getContext();
+                    await ctx?.executeSlashCommandsWithOptions?.(`/profile ${String(originalProfileName).replace(/"/g, '\\"')}`);
+                    console.log(`[${extensionName}] Restored connection profile to:`, originalProfileName);
+                } catch (err) {
+                    console.error(`[${extensionName}] Error restoring connection profile to '${originalProfileName}':`, err);
+                }
+            }
+            return;
+        }
+
         if (!originalPresetId || !targetPresetId || originalPresetId === targetPresetId) {
             console.log(`[${extensionName}] No restore needed - missing IDs or same preset`);
             return;
