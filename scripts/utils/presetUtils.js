@@ -9,7 +9,7 @@ import { extensionName } from '../../index.js';
  */
 
 export function handlePresetSwitching(presetValue) {
-    const extensionName = "GuidedGenerations-Extension-test1";
+    const extensionName = "GuidedGenerations-Extension-test";
     let originalPresetId = null;
     let targetPresetId = null;
     let isTextCompletionMode = false;
