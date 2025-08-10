@@ -10,7 +10,7 @@ import { extensionName } from '../../index.js';
 import { getContext, extension_settings } from '../../../../extensions.js';
 
 export function handlePresetSwitching(presetValue) {
-    const extensionName = "GuidedGenerations-Extension-test";
+    const extensionName = "GuidedGenerations-Extension";
     let originalPresetId = null;
     let targetPresetId = null;
     let isTextCompletionMode = false;
