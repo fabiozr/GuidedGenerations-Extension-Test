@@ -1,5 +1,5 @@
 {
-    "name": "GuidedGenerations-test1",
+    "name": "GuidedGenerations",
     "display_name": "Guided Generations Extension-test1",
     "loading_order": 100,
     "requires": [],
