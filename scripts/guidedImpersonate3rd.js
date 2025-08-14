@@ -55,6 +55,55 @@ ${stscriptCommand}`;
             await switchPreset();
             console.log('[GuidedGenerations] Preset/profile switch completed, executing script...');
             
+            // Set up event listeners to restore profile after generation completes
+            let generationStarted = false;
+            let restoreTimeout;
+            
+            const onGenerationStarted = () => {
+                console.log('[GuidedGenerations] Generation started, will restore profile after completion...');
+                generationStarted = true;
+            };
+            
+            const onGenerationFinished = async () => {
+                console.log('[GuidedGenerations] Generation finished, restoring original preset/profile...');
+                try {
+                    await restore();
+                    console.log('[GuidedGenerations] Preset/profile restore completed.');
+                } catch (error) {
+                    console.error('[GuidedGenerations] Error during profile restore:', error);
+                } finally {
+                    // Clean up event listeners
+                    if (context.eventSource) {
+                        context.eventSource.off('generation_started', onGenerationStarted);
+                        context.eventSource.off('generation_finished', onGenerationFinished);
+                        context.eventSource.off('GENERATION_AFTER_COMMANDS', onGenerationFinished);
+                    }
+                    if (restoreTimeout) {
+                        clearTimeout(restoreTimeout);
+                    }
+                }
+            };
+            
+            // Set up event listeners
+            if (context.eventSource) {
+                context.eventSource.on('generation_started', onGenerationStarted);
+                context.eventSource.on('generation_finished', onGenerationFinished);
+                context.eventSource.on('GENERATION_AFTER_COMMANDS', onGenerationFinished);
+            }
+            
+            // Fallback timeout in case events don't fire
+            restoreTimeout = setTimeout(async () => {
+                if (!generationStarted) {
+                    console.log('[GuidedGenerations] No generation started, restoring profile immediately...');
+                    try {
+                        await restore();
+                        console.log('[GuidedGenerations] Preset/profile restore completed (timeout fallback).');
+                    } catch (error) {
+                        console.error('[GuidedGenerations] Error during profile restore (timeout):', error);
+                    }
+                }
+            }, 5000); // 5 second timeout
+            
             await context.executeSlashCommandsWithOptions(fullScript);
             
             // After completion, read the new input and store it in shared state
@@ -66,12 +115,7 @@ ${stscriptCommand}`;
     } catch (error) {
         console.error(`[GuidedGenerations] Error executing Guided Impersonate (3rd) stscript: ${error}`);
         setLastImpersonateResult(''); // Clear shared state on error
-    } finally {
-        // After completion, restore original preset using utility restore function
-        console.log('[GuidedGenerations] Restoring original preset/profile...');
-        await restore();
-        console.log('[GuidedGenerations] Preset/profile restore completed.');
-    } 
+    }
 };
 
 // Export the function
