@@ -50,8 +50,10 @@ ${stscriptCommand}`;
     try {
         const context = getContext(); 
         if (typeof context.executeSlashCommandsWithOptions === 'function') {
-            // Switch preset before executing
-            switchPreset();
+            // Switch preset before executing and wait for it to complete
+            console.log('[GuidedGenerations] Switching preset/profile before execution...');
+            await switchPreset();
+            console.log('[GuidedGenerations] Preset/profile switch completed, executing script...');
             
             await context.executeSlashCommandsWithOptions(fullScript);
             
@@ -66,7 +68,9 @@ ${stscriptCommand}`;
         setLastImpersonateResult(''); // Clear shared state on error
     } finally {
         // After completion, restore original preset using utility restore function
-        restore();
+        console.log('[GuidedGenerations] Restoring original preset/profile...');
+        await restore();
+        console.log('[GuidedGenerations] Preset/profile restore completed.');
     } 
 };
 

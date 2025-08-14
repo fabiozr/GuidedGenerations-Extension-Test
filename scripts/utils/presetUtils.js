@@ -24,12 +24,21 @@ export function handlePresetSwitching(presetValue) {
         try {
             const ctx = getContext();
             const profiles = ctx?.extensionSettings?.connectionManager?.profiles || [];
+            console.log(`[${extensionName}] Available profiles:`, profiles);
+            
             // Detect current/active profile heuristically before switching
             const active = profiles.find(p => p?.selected || p?.isActive || p?.active || p?.current);
             originalProfileName = active?.name || active?.title || active?.id || null;
+            console.log(`[${extensionName}] Detected active profile:`, active);
+            console.log(`[${extensionName}] Original profile name:`, originalProfileName);
+            
             const match = profiles.find(p => p && (p.id === profileId));
+            console.log(`[${extensionName}] Looking for profile with ID:`, profileId);
+            console.log(`[${extensionName}] Found matching profile:`, match);
+            
             // Try common fields for display name
             targetProfileName = match?.name || match?.title || match?.id || null;
+            console.log(`[${extensionName}] Target profile name:`, targetProfileName);
         } catch (e) {
             console.warn(`[${extensionName}] Failed to resolve connection profile by id`, e);
         }
@@ -195,9 +204,13 @@ export function handlePresetSwitching(presetValue) {
 
     const restore = async () => {
         console.log(`[${extensionName}] restore called with originalPresetId:`, originalPresetId, 'targetPresetId:', targetPresetId);
+        console.log(`[${extensionName}] restore - targetProfileName:`, targetProfileName, 'originalProfileName:', originalProfileName);
+        
         // Restore previous connection profile if we switched and detected an original
         if (targetProfileName) {
+            console.log(`[${extensionName}] Profile switching was used, checking if restore is needed...`);
             if (originalProfileName && originalProfileName !== targetProfileName) {
+                console.log(`[${extensionName}] Restoring from ${targetProfileName} to ${originalProfileName}...`);
                 try {
                     const ctx = getContext();
                     await ctx?.executeSlashCommandsWithOptions?.(`/profile ${String(originalProfileName).replace(/"/g, '\\"')}`);
@@ -205,6 +218,8 @@ export function handlePresetSwitching(presetValue) {
                 } catch (err) {
                     console.error(`[${extensionName}] Error restoring connection profile to '${originalProfileName}':`, err);
                 }
+            } else {
+                console.log(`[${extensionName}] No profile restore needed - originalProfileName:', originalProfileName, 'targetProfileName:', targetProfileName`);
             }
             return;
         }
