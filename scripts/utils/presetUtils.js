@@ -57,52 +57,115 @@ export function handlePresetSwitching(presetValue) {
                 }
             }
             
-            // If still no active profile, try to get it from the connection manager service
+            // If still no active profile, try to get it from the connection manager's internal state
             if (!active) {
-                console.log(`[${extensionName}] Still no active profile, trying connection manager service...`);
+                console.log(`[${extensionName}] Still no active profile, trying connection manager internal state...`);
                 try {
-                    const connectionManager = ctx?.ConnectionManagerRequestService;
-                    if (connectionManager && typeof connectionManager.getCurrentProfile === 'function') {
-                        const currentProfile = connectionManager.getCurrentProfile();
-                        console.log(`[${extensionName}] Current profile from service:`, currentProfile);
-                        if (currentProfile) {
-                            active = profiles.find(p => p?.id === currentProfile.id);
-                            console.log(`[${extensionName}] Found active profile from service:`, active);
+                    // Try to get the current profile from the connection manager's internal state
+                    const connectionManager = ctx?.extensionSettings?.connectionManager;
+                    if (connectionManager) {
+                        console.log(`[${extensionName}] Connection manager object:`, connectionManager);
+                        
+                        // Try different possible properties where the current profile might be stored
+                        const possibleCurrentProfileProps = [
+                            'currentProfile',
+                            'activeProfile', 
+                            'selectedProfile',
+                            'currentProfileId',
+                            'activeProfileId',
+                            'selectedProfileId'
+                        ];
+                        
+                        for (const prop of possibleCurrentProfileProps) {
+                            const value = connectionManager[prop];
+                            console.log(`[${extensionName}] Checking connectionManager.${prop}:`, value);
+                            
+                            if (value) {
+                                if (typeof value === 'string') {
+                                    // It's a profile ID
+                                    active = profiles.find(p => p?.id === value);
+                                    if (active) {
+                                        console.log(`[${extensionName}] Found active profile by ID from ${prop}:`, active);
+                                        break;
+                                    }
+                                } else if (typeof value === 'object' && value.id) {
+                                    // It's a profile object
+                                    active = profiles.find(p => p?.id === value.id);
+                                    if (active) {
+                                        console.log(`[${extensionName}] Found active profile by object from ${prop}:`, active);
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 } catch (e) {
-                    console.warn(`[${extensionName}] Failed to get current profile from service:`, e);
+                    console.warn(`[${extensionName}] Failed to get profile from connection manager internal state:`, e);
                 }
             }
             
-            // If still no active profile, try to determine it from current API settings
+            // If still no active profile, try to get it from the main context's API settings
             if (!active) {
-                console.log(`[${extensionName}] Still no active profile, trying to determine from current API settings...`);
+                console.log(`[${extensionName}] Still no active profile, trying main context API settings...`);
                 try {
-                    // Get current API settings from the main context
-                    const currentApi = ctx?.main_api || null;
-                    const currentModel = ctx?.model || null;
-                    const currentPreset = ctx?.preset || null;
+                    // Try to get current API settings from different possible locations
+                    const possibleApiSettings = [
+                        ctx?.main_api,
+                        ctx?.api,
+                        ctx?.current_api,
+                        ctx?.selected_api,
+                        ctx?.settings?.main_api,
+                        ctx?.settings?.api,
+                        ctx?.extensionSettings?.main_api,
+                        ctx?.extensionSettings?.api
+                    ];
                     
-                    console.log(`[${extensionName}] Current API settings - API: ${currentApi}, Model: ${currentModel}, Preset: ${currentPreset}`);
+                    const possibleModelSettings = [
+                        ctx?.model,
+                        ctx?.current_model,
+                        ctx?.selected_model,
+                        ctx?.settings?.model,
+                        ctx?.extensionSettings?.model
+                    ];
                     
-                    // Try to find a profile that matches the current settings
-                    for (const profile of profiles) {
-                        const apiMatch = profile.api === currentApi;
-                        const modelMatch = profile.model === currentModel;
-                        const presetMatch = profile.preset === currentPreset;
-                        
-                        console.log(`[${extensionName}] Checking profile ${profile.name}: API match=${apiMatch}, Model match=${modelMatch}, Preset match=${presetMatch}`);
-                        
-                        // If we have a good match (at least API and model match), consider this the active profile
-                        if (apiMatch && modelMatch) {
-                            active = profile;
-                            console.log(`[${extensionName}] Found active profile by API settings match:`, active);
-                            break;
+                    const possiblePresetSettings = [
+                        ctx?.preset,
+                        ctx?.current_preset,
+                        ctx?.selected_preset,
+                        ctx?.settings?.preset,
+                        ctx?.extensionSettings?.preset
+                    ];
+                    
+                    console.log(`[${extensionName}] Possible API settings:`, possibleApiSettings);
+                    console.log(`[${extensionName}] Possible model settings:`, possibleModelSettings);
+                    console.log(`[${extensionName}] Possible preset settings:`, possiblePresetSettings);
+                    
+                    // Find the first non-null value from each array
+                    const currentApi = possibleApiSettings.find(setting => setting != null);
+                    const currentModel = possibleModelSettings.find(setting => setting != null);
+                    const currentPreset = possiblePresetSettings.find(setting => setting != null);
+                    
+                    console.log(`[${extensionName}] Found current settings - API: ${currentApi}, Model: ${currentModel}, Preset: ${currentPreset}`);
+                    
+                    if (currentApi || currentModel || currentPreset) {
+                        // Try to find a profile that matches any of these settings
+                        for (const profile of profiles) {
+                            const apiMatch = currentApi ? profile.api === currentApi : false;
+                            const modelMatch = currentModel ? profile.model === currentModel : false;
+                            const presetMatch = currentPreset ? profile.preset === currentPreset : false;
+                            
+                            console.log(`[${extensionName}] Checking profile ${profile.name}: API match=${apiMatch}, Model match=${modelMatch}, Preset match=${presetMatch}`);
+                            
+                            // If we have at least one match, consider this the active profile
+                            if (apiMatch || modelMatch || presetMatch) {
+                                active = profile;
+                                console.log(`[${extensionName}] Found active profile by partial API settings match:`, active);
+                                break;
+                            }
                         }
                     }
                 } catch (e) {
-                    console.warn(`[${extensionName}] Failed to determine profile from API settings:`, e);
+                    console.warn(`[${extensionName}] Failed to get profile from main context API settings:`, e);
                 }
             }
             
