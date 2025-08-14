@@ -70,7 +70,7 @@ export async function runWithConnectionProfile(instructionText, maxTokensOptiona
     ];
 
     try {
-        const maxTokens = typeof maxTokensOptional === 'number' ? maxTokensOptional : 512;
+        const maxTokens = typeof maxTokensOptional === 'number' ? maxTokensOptional : 1500;
         const resp = await context.ConnectionManagerRequestService.sendRequest(
             settings.profileId,
             messages,
