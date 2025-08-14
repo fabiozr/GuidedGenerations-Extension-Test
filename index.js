@@ -57,17 +57,6 @@ export async function runWithConnectionProfile(instructionText, maxTokensOptiona
         return null;
     }
 
-    const worldInfoPrompt = await context.getWorldInfoPrompt(context.chat, 1000, false, {
-        trigger: 'normal',
-        personaDescription: '',
-        characterDescription: '',
-        characterPersonality: '',
-        characterDepthPrompt: '',
-        scenario: '',
-        creatorNotes: ''
-    })
-    console.log("worldInfoPrompt", worldInfoPrompt);
-
     console.log("context.chat", context.chat);
 
     // Build a minimal recent history (last ~20 messages) with roles
