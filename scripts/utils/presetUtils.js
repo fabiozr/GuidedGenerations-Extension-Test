@@ -432,5 +432,110 @@ export function handlePresetSwitching(presetValue) {
     };
 
     console.log(`[${extensionName}] Returning switch and restore functions`);
-    return { switch: switchPreset, restore };
+    
+    // Create a new function that handles the entire lifecycle with proper event listening
+    const executeWithPresetSwitching = async (scriptFunction) => {
+        try {
+            // Switch preset before executing
+            console.log(`[${extensionName}] Switching preset/profile before execution...`);
+            await switchPreset();
+            console.log(`[${extensionName}] Preset/profile switch completed, executing script...`);
+            
+            // Set up event listeners to restore profile after generation completes
+            let generationStarted = false;
+            let restoreTimeout;
+            let eventListeners = [];
+            
+            const onGenerationStarted = () => {
+                console.log(`[${extensionName}] Generation started, will restore profile after completion...`);
+                generationStarted = true;
+            };
+            
+            const onGenerationFinished = async () => {
+                console.log(`[${extensionName}] Generation finished, restoring original preset/profile...`);
+                try {
+                    await restore();
+                    console.log(`[${extensionName}] Preset/profile restore completed.`);
+                } catch (error) {
+                    console.error(`[${extensionName}] Error during profile restore:`, error);
+                } finally {
+                    // Clean up event listeners
+                    const ctx = getContext();
+                    if (ctx && ctx.eventSource) {
+                        eventListeners.forEach(({ event, handler }) => {
+                            try {
+                                if (typeof ctx.eventSource.removeEventListener === 'function') {
+                                    ctx.eventSource.removeEventListener(event, handler);
+                                } else if (typeof ctx.eventSource.off === 'function') {
+                                    ctx.eventSource.off(event, handler);
+                                }
+                            } catch (e) {
+                                console.warn(`[${extensionName}] Failed to remove event listener for ${event}:`, e);
+                            }
+                        });
+                    }
+                    if (restoreTimeout) {
+                        clearTimeout(restoreTimeout);
+                    }
+                }
+            };
+            
+            // Set up event listeners
+            const ctx = getContext();
+            if (ctx && ctx.eventSource) {
+                // Try different event listener methods
+                if (typeof ctx.eventSource.addEventListener === 'function') {
+                    ctx.eventSource.addEventListener('generation_started', onGenerationStarted);
+                    ctx.eventSource.addEventListener('generation_finished', onGenerationFinished);
+                    ctx.eventSource.addEventListener('GENERATION_AFTER_COMMANDS', onGenerationFinished);
+                    eventListeners = [
+                        { event: 'generation_started', handler: onGenerationStarted },
+                        { event: 'generation_finished', handler: onGenerationFinished },
+                        { event: 'GENERATION_AFTER_COMMANDS', handler: onGenerationFinished }
+                    ];
+                } else if (typeof ctx.eventSource.on === 'function') {
+                    ctx.eventSource.on('generation_started', onGenerationStarted);
+                    ctx.eventSource.on('generation_finished', onGenerationFinished);
+                    ctx.eventSource.on('GENERATION_AFTER_COMMANDS', onGenerationFinished);
+                    eventListeners = [
+                        { event: 'generation_started', handler: onGenerationStarted },
+                        { event: 'generation_finished', handler: onGenerationFinished },
+                        { event: 'GENERATION_AFTER_COMMANDS', handler: onGenerationFinished }
+                    ];
+                }
+            }
+            
+            // Fallback timeout in case events don't fire
+            restoreTimeout = setTimeout(async () => {
+                if (!generationStarted) {
+                    console.log(`[${extensionName}] No generation started, restoring profile immediately...`);
+                    try {
+                        await restore();
+                        console.log(`[${extensionName}] Preset/profile restore completed (timeout fallback).`);
+                    } catch (error) {
+                        console.error(`[${extensionName}] Error during profile restore (timeout):`, error);
+                    }
+                }
+            }, 5000); // 5 second timeout
+            
+            // Execute the script function
+            await scriptFunction();
+            
+        } catch (error) {
+            console.error(`[${extensionName}] Error in executeWithPresetSwitching:`, error);
+            // Try to restore on error
+            try {
+                await restore();
+            } catch (restoreError) {
+                console.error(`[${extensionName}] Error during profile restore on error:`, restoreError);
+            }
+            throw error;
+        }
+    };
+    
+    return { 
+        switch: switchPreset, 
+        restore,
+        executeWithPresetSwitching 
+    };
 }

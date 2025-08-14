@@ -28,7 +28,7 @@ const guidedImpersonate = async () => {
     const presetValue = extension_settings[extensionName]?.[presetKey] ?? '';
     console.log(`[GuidedGenerations] Using preset for impersonate: ${presetValue || 'none'}`);
     
-    const { switch: switchPreset, restore } = handlePresetSwitching(presetValue);
+    const { executeWithPresetSwitching } = handlePresetSwitching(presetValue);
 
     // Use user-defined impersonate prompt override
     const promptTemplate = extension_settings[extensionName]?.promptImpersonate1st ?? '';
@@ -42,28 +42,20 @@ ${stscriptCommand}`;
     try {
         const context = getContext();
         if (typeof context.executeSlashCommandsWithOptions === 'function') {
-            // Switch preset before executing
-            switchPreset();
-            
-            // Execute the command and wait for it to complete
-            await context.executeSlashCommandsWithOptions(fullScript); 
-            
-            // After completion, read the new input and store it using the setter
-            setLastImpersonateResult(textarea.value);
-            console.log('[GuidedGenerations] Guided Impersonate (1st) stscript executed, new input stored in shared state.');
-
-            // After completion, restore original preset using utility restore function
-            restore();
-
+            // Use the unified function that handles preset switching and restoration
+            await executeWithPresetSwitching(async () => {
+                await context.executeSlashCommandsWithOptions(fullScript);
+                
+                // After completion, read the new input and store it using the setter
+                setLastImpersonateResult(textarea.value);
+                console.log('[GuidedGenerations] Guided Impersonate (1st) stscript executed, new input stored in shared state.');
+            });
         } else {
             console.error('[GuidedGenerations] context.executeSlashCommandsWithOptions not found!');
         }
     } catch (error) {
         console.error(`[GuidedGenerations] Error executing Guided Impersonate (1st) stscript: ${error}`);
         setLastImpersonateResult(''); // Use setter to clear shared state on error
-        
-        // Restore original preset on error
-        restore();
     }
 };
 

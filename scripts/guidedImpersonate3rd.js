@@ -42,7 +42,7 @@ const guidedImpersonate3rd = async () => {
     const presetValue = extension_settings[extensionName]?.[presetKey] ?? '';
     console.log(`[GuidedGenerations] Using preset for 3rd-person impersonate: ${presetValue || 'none'}`);
     
-    const { switch: switchPreset, restore } = handlePresetSwitching(presetValue);
+    const { executeWithPresetSwitching } = handlePresetSwitching(presetValue);
     
     const fullScript = `// 3rd-person impersonate guide|
 ${stscriptCommand}`;
@@ -50,65 +50,14 @@ ${stscriptCommand}`;
     try {
         const context = getContext(); 
         if (typeof context.executeSlashCommandsWithOptions === 'function') {
-            // Switch preset before executing and wait for it to complete
-            console.log('[GuidedGenerations] Switching preset/profile before execution...');
-            await switchPreset();
-            console.log('[GuidedGenerations] Preset/profile switch completed, executing script...');
-            
-            // Set up event listeners to restore profile after generation completes
-            let generationStarted = false;
-            let restoreTimeout;
-            
-            const onGenerationStarted = () => {
-                console.log('[GuidedGenerations] Generation started, will restore profile after completion...');
-                generationStarted = true;
-            };
-            
-            const onGenerationFinished = async () => {
-                console.log('[GuidedGenerations] Generation finished, restoring original preset/profile...');
-                try {
-                    await restore();
-                    console.log('[GuidedGenerations] Preset/profile restore completed.');
-                } catch (error) {
-                    console.error('[GuidedGenerations] Error during profile restore:', error);
-                } finally {
-                    // Clean up event listeners
-                    if (context.eventSource) {
-                        context.eventSource.off('generation_started', onGenerationStarted);
-                        context.eventSource.off('generation_finished', onGenerationFinished);
-                        context.eventSource.off('GENERATION_AFTER_COMMANDS', onGenerationFinished);
-                    }
-                    if (restoreTimeout) {
-                        clearTimeout(restoreTimeout);
-                    }
-                }
-            };
-            
-            // Set up event listeners
-            if (context.eventSource) {
-                context.eventSource.on('generation_started', onGenerationStarted);
-                context.eventSource.on('generation_finished', onGenerationFinished);
-                context.eventSource.on('GENERATION_AFTER_COMMANDS', onGenerationFinished);
-            }
-            
-            // Fallback timeout in case events don't fire
-            restoreTimeout = setTimeout(async () => {
-                if (!generationStarted) {
-                    console.log('[GuidedGenerations] No generation started, restoring profile immediately...');
-                    try {
-                        await restore();
-                        console.log('[GuidedGenerations] Preset/profile restore completed (timeout fallback).');
-                    } catch (error) {
-                        console.error('[GuidedGenerations] Error during profile restore (timeout):', error);
-                    }
-                }
-            }, 5000); // 5 second timeout
-            
-            await context.executeSlashCommandsWithOptions(fullScript);
-            
-            // After completion, read the new input and store it in shared state
-            setLastImpersonateResult(textarea.value); // Use shared setter
-            console.log('[GuidedGenerations] Guided Impersonate (3rd) stscript executed, new input stored in shared state.');
+            // Use the unified function that handles preset switching and restoration
+            await executeWithPresetSwitching(async () => {
+                await context.executeSlashCommandsWithOptions(fullScript);
+                
+                // After completion, read the new input and store it in shared state
+                setLastImpersonateResult(textarea.value); // Use shared setter
+                console.log('[GuidedGenerations] Guided Impersonate (3rd) stscript executed, new input stored in shared state.');
+            });
         } else {
             console.error('[GuidedGenerations] context.executeSlashCommandsWithOptions not found!');
         }
