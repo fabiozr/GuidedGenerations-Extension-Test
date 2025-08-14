@@ -20,6 +20,7 @@ export function handlePresetSwitching(presetValue) {
     const profileId = extension_settings?.[extensionName]?.profileId;
     let targetProfileName = null;
     let originalProfileName = null;
+    let originalProfileId = null;
     if (useConnectionProfile && profileId) {
         try {
             const ctx = getContext();
@@ -27,10 +28,89 @@ export function handlePresetSwitching(presetValue) {
             console.log(`[${extensionName}] Available profiles:`, profiles);
             
             // Detect current/active profile heuristically before switching
-            const active = profiles.find(p => p?.selected || p?.isActive || p?.active || p?.current);
+            console.log(`[${extensionName}] Checking each profile for active status...`);
+            let active = null;
+            for (let i = 0; i < profiles.length; i++) {
+                const profile = profiles[i];
+                console.log(`[${extensionName}] Profile ${i}:`, profile);
+                console.log(`[${extensionName}] Profile ${i} properties: selected=${profile?.selected}, isActive=${profile?.isActive}, active=${profile?.active}, current=${profile?.current}`);
+                
+                if (profile?.selected || profile?.isActive || profile?.active || profile?.current) {
+                    active = profile;
+                    console.log(`[${extensionName}] Found active profile at index ${i}:`, active);
+                    break;
+                }
+            }
+            
+            // If no active profile found by flags, try to get the current profile from context
+            if (!active) {
+                console.log(`[${extensionName}] No active profile found by flags, trying to get current profile from context...`);
+                try {
+                    const currentProfileId = ctx?.extensionSettings?.connectionManager?.currentProfileId;
+                    console.log(`[${extensionName}] Current profile ID from context:`, currentProfileId);
+                    if (currentProfileId) {
+                        active = profiles.find(p => p?.id === currentProfileId);
+                        console.log(`[${extensionName}] Found active profile by ID:`, active);
+                    }
+                } catch (e) {
+                    console.warn(`[${extensionName}] Failed to get current profile from context:`, e);
+                }
+            }
+            
+            // If still no active profile, try to get it from the connection manager service
+            if (!active) {
+                console.log(`[${extensionName}] Still no active profile, trying connection manager service...`);
+                try {
+                    const connectionManager = ctx?.ConnectionManagerRequestService;
+                    if (connectionManager && typeof connectionManager.getCurrentProfile === 'function') {
+                        const currentProfile = connectionManager.getCurrentProfile();
+                        console.log(`[${extensionName}] Current profile from service:`, currentProfile);
+                        if (currentProfile) {
+                            active = profiles.find(p => p?.id === currentProfile.id);
+                            console.log(`[${extensionName}] Found active profile from service:`, active);
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[${extensionName}] Failed to get current profile from service:`, e);
+                }
+            }
+            
+            // If still no active profile, try to determine it from current API settings
+            if (!active) {
+                console.log(`[${extensionName}] Still no active profile, trying to determine from current API settings...`);
+                try {
+                    // Get current API settings from the main context
+                    const currentApi = ctx?.main_api || null;
+                    const currentModel = ctx?.model || null;
+                    const currentPreset = ctx?.preset || null;
+                    
+                    console.log(`[${extensionName}] Current API settings - API: ${currentApi}, Model: ${currentModel}, Preset: ${currentPreset}`);
+                    
+                    // Try to find a profile that matches the current settings
+                    for (const profile of profiles) {
+                        const apiMatch = profile.api === currentApi;
+                        const modelMatch = profile.model === currentModel;
+                        const presetMatch = profile.preset === currentPreset;
+                        
+                        console.log(`[${extensionName}] Checking profile ${profile.name}: API match=${apiMatch}, Model match=${modelMatch}, Preset match=${presetMatch}`);
+                        
+                        // If we have a good match (at least API and model match), consider this the active profile
+                        if (apiMatch && modelMatch) {
+                            active = profile;
+                            console.log(`[${extensionName}] Found active profile by API settings match:`, active);
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[${extensionName}] Failed to determine profile from API settings:`, e);
+                }
+            }
+            
             originalProfileName = active?.name || active?.title || active?.id || null;
+            originalProfileId = active?.id || null;
             console.log(`[${extensionName}] Detected active profile:`, active);
             console.log(`[${extensionName}] Original profile name:`, originalProfileName);
+            console.log(`[${extensionName}] Original profile ID:`, originalProfileId);
             
             const match = profiles.find(p => p && (p.id === profileId));
             console.log(`[${extensionName}] Looking for profile with ID:`, profileId);
@@ -209,17 +289,29 @@ export function handlePresetSwitching(presetValue) {
         // Restore previous connection profile if we switched and detected an original
         if (targetProfileName) {
             console.log(`[${extensionName}] Profile switching was used, checking if restore is needed...`);
+            console.log(`[${extensionName}] Restore check - originalProfileName: ${originalProfileName}, originalProfileId: ${originalProfileId}, targetProfileName: ${targetProfileName}`);
+            
+            // Try to restore using original profile name or ID
+            let restoreTarget = null;
             if (originalProfileName && originalProfileName !== targetProfileName) {
-                console.log(`[${extensionName}] Restoring from ${targetProfileName} to ${originalProfileName}...`);
+                restoreTarget = originalProfileName;
+                console.log(`[${extensionName}] Will restore using original profile name: ${restoreTarget}`);
+            } else if (originalProfileId && originalProfileId !== profileId) {
+                restoreTarget = originalProfileId;
+                console.log(`[${extensionName}] Will restore using original profile ID: ${restoreTarget}`);
+            }
+            
+            if (restoreTarget) {
+                console.log(`[${extensionName}] Restoring from ${targetProfileName} to ${restoreTarget}...`);
                 try {
                     const ctx = getContext();
-                    await ctx?.executeSlashCommandsWithOptions?.(`/profile ${String(originalProfileName).replace(/"/g, '\\"')}`);
-                    console.log(`[${extensionName}] Restored connection profile to:`, originalProfileName);
+                    await ctx?.executeSlashCommandsWithOptions?.(`/profile ${String(restoreTarget).replace(/"/g, '\\"')}`);
+                    console.log(`[${extensionName}] Restored connection profile to:`, restoreTarget);
                 } catch (err) {
-                    console.error(`[${extensionName}] Error restoring connection profile to '${originalProfileName}':`, err);
+                    console.error(`[${extensionName}] Error restoring connection profile to '${restoreTarget}':`, err);
                 }
             } else {
-                console.log(`[${extensionName}] No profile restore needed - originalProfileName:', originalProfileName, 'targetProfileName:', targetProfileName`);
+                console.log(`[${extensionName}] No profile restore needed - no valid restore target found`);
             }
             return;
         }
